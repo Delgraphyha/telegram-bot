@@ -35,7 +35,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     else:
-        await update.message.reply_text("🎧 عضویت شما تایید شد!\nحالا نام آهنگ فارسی یا خارجی مورد نظر خود را بفرستید تا نمونه کوتاه یا فایل آن را دریافت کنید:")
+        await update.message.reply_text("🎧 عضویت شما تایید شد!\nحالا نام آهنگ فارسی یا خارجی مورد نظر خود را بفرستید:")
 
 async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -58,7 +58,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
         
     query_text = update.message.text
-    processing_msg = await update.message.reply_text("🔍 در حال جستجوی آهنگ فارسی/خارجی مورد نظر...")
+    processing_msg = await update.message.reply_text("🔍 در حال جستجوی آهنگ مورد نظر...")
 
     try:
         ydl_opts = {
@@ -82,7 +82,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             file_path = "song.mp3"
 
             if os.path.exists(file_path):
-                # ارسال نمونه ۱۵ ثانیه‌ای یا خود فایل
                 await update.message.reply_audio(
                     audio=open(file_path, 'rb'),
                     title=title,
@@ -96,22 +95,20 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         print(f"Error downloading music: {e}")
-        await update.message.reply_text("❌ در پردازش درخواست شما خطایی رخ داد. لطفاً دوباره تلاش کنید.")
+        await update.message.reply_text("❌ در پردازش درخواست شما خطایی رخ داد.")
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), telegram_app.bot)
-    asyncio_run(telegram_app.process_update(update))
+    if telegram_app:
+        json_data = request.get_json(force=True)
+        update = Update.de_json(json_data, telegram_app.bot)
+        # اجرای ایمن در لوپ رویداد
+        asyncio.run_coroutine_threadsafe(telegram_app.process_update(update), telegram_app.bot.loop)
     return "ok", 200
 
 @app.route("/")
 def index():
     return "Bot is running!", 200
-
-def asyncio_run(coro):
-    import asyncio
-    loop = asyncio.get_event_loop()
-    return loop.run_until_complete(coro)
 
 def main():
     global telegram_app
@@ -119,18 +116,22 @@ def main():
         print("❌ Error: TELEGRAM_TOKEN not set!")
         return
 
+    # ساخت لوپ رویداد اختصاصی برای جلوگیری از ارور
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
     telegram_app = ApplicationBuilder().token(TOKEN).build()
     
     telegram_app.add_handler(MessageHandler(filters.COMMAND & filters.Regex("^/start"), start_handler))
     telegram_app.add_handler(CallbackQueryHandler(button_callback_handler, pattern="^check_sub$"))
     telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 
-    asyncio_run(telegram_app.initialize())
+    loop.run_until_complete(telegram_app.initialize())
     
     RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL")
     if RENDER_EXTERNAL_URL:
         webhook_url = f"{RENDER_EXTERNAL_URL}/{TOKEN}"
-        asyncio_run(telegram_app.bot.set_webhook(webhook_url))
+        loop.run_until_complete(telegram_app.bot.set_webhook(webhook_url))
         print(f"Webhook set to: {webhook_url}")
 
     app.run(host="0.0.0.0", port=PORT)
