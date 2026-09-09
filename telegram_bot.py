@@ -2,7 +2,7 @@ import os
 import asyncio
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, MessageHandler, CallbackQueryHandler, ContextTypes, filters
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 import yt_dlp
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -11,6 +11,7 @@ CHANNEL_USERNAME = "@delgraphyha"
 
 app = Flask(__name__)
 telegram_app = None
+main_loop = None
 
 async def check_subscription(user_id, context):
     try:
@@ -31,11 +32,11 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("✅ عضو شدم، بررسی مجدد", callback_data="check_sub")]
         ]
         await update.message.reply_text(
-            "🎵 برای استفاده از ربات و دریافت موزیک‌های فارسی و خارجی، لطفاً ابتدا در کانال ما عضو شوید:",
+            "🎵 برای استفاده از ربات و دریافت موزیک‌ها، لطفاً ابتدا در کانال ما عضو شوید:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     else:
-        await update.message.reply_text("🎧 عضویت شما تایید شد!\nحالا نام آهنگ فارسی یا خارجی مورد نظر خود را بفرستید:")
+        await update.message.reply_text("🎧 عضویت شما تایید شد!\nحالا نام آهنگ مورد نظر خود را بفرستید تا جستجو کنم:")
 
 async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -51,14 +52,15 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    is_member = await check_subscription(user_id, context)
     
-    if not is_member:
-        await update.message.reply_text("⚠️ لطفاً ابتدا در کانال @delgraphyha عضو شوید تا بتوانید از ربات استفاده کنید.")
-        return
+    if update.message.chat.type not in ['group', 'supergroup']:
+        is_member = await check_subscription(user_id, context)
+        if not is_member:
+            await update.message.reply_text("⚠️ لطفاً ابتدا در کانال @delgraphyha عضو شوید تا بتوانید از ربات استفاده کنید.")
+            return
         
     query_text = update.message.text
-    processing_msg = await update.message.reply_text("🔍 در حال جستجوی آهنگ مورد نظر...")
+    processing_msg = await update.message.reply_text("🔍 در حال جستجوی موزیک...")
 
     try:
         ydl_opts = {
@@ -95,15 +97,14 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         print(f"Error downloading music: {e}")
-        await update.message.reply_text("❌ در پردازش درخواست شما خطایی رخ داد.")
+        await update.message.reply_text("❌ در جستجوی موزیک خطایی رخ داد.")
 
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
-    if telegram_app:
+    if telegram_app and main_loop:
         json_data = request.get_json(force=True)
         update = Update.de_json(json_data, telegram_app.bot)
-        # اجرای ایمن در لوپ رویداد
-        asyncio.run_coroutine_threadsafe(telegram_app.process_update(update), telegram_app.bot.loop)
+        asyncio.run_coroutine_threadsafe(telegram_app.process_update(update), main_loop)
     return "ok", 200
 
 @app.route("/")
@@ -111,27 +112,27 @@ def index():
     return "Bot is running!", 200
 
 def main():
-    global telegram_app
+    global telegram_app, main_loop
     if not TOKEN:
         print("❌ Error: TELEGRAM_TOKEN not set!")
         return
 
-    # ساخت لوپ رویداد اختصاصی برای جلوگیری از ارور
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    main_loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(main_loop)
 
     telegram_app = ApplicationBuilder().token(TOKEN).build()
     
-    telegram_app.add_handler(MessageHandler(filters.COMMAND & filters.Regex("^/start"), start_handler))
+    telegram_app.add_handler(CommandHandler("start", start_handler))
     telegram_app.add_handler(CallbackQueryHandler(button_callback_handler, pattern="^check_sub$"))
     telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 
-    loop.run_until_complete(telegram_app.initialize())
+    main_loop.run_until_complete(telegram_app.initialize())
+    main_loop.run_until_complete(telegram_app.start())
     
     RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL")
     if RENDER_EXTERNAL_URL:
         webhook_url = f"{RENDER_EXTERNAL_URL}/{TOKEN}"
-        loop.run_until_complete(telegram_app.bot.set_webhook(webhook_url))
+        main_loop.run_until_complete(telegram_app.bot.set_webhook(webhook_url))
         print(f"Webhook set to: {webhook_url}")
 
     app.run(host="0.0.0.0", port=PORT)
