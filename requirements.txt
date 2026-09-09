@@ -3,3 +3,4 @@ apscheduler
 ffmpeg-python
 pytz
 Flask
+yt-dlp
