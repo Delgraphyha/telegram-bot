@@ -119,7 +119,7 @@ def main():
         print("❌ Error: TELEGRAM_TOKEN not set!")
         return
 
-    telegram_app = ApplicationBuilder().token(TOKEN].build()
+    telegram_app = ApplicationBuilder().token(TOKEN).build()
     
     telegram_app.add_handler(MessageHandler(filters.COMMAND & filters.Regex("^/start"), start_handler))
     telegram_app.add_handler(CallbackQueryHandler(button_callback_handler, pattern="^check_sub$"))
