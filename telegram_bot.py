@@ -1,17 +1,10 @@
 import os
-import asyncio
-from flask import Flask, request
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 import yt_dlp
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
-PORT = int(os.environ.get("PORT", "10000"))
 CHANNEL_USERNAME = "@delgraphyha"
-
-app = Flask(__name__)
-telegram_app = None
-main_loop = None
 
 async def check_subscription(user_id, context):
     try:
@@ -99,43 +92,19 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f"Error downloading music: {e}")
         await update.message.reply_text("❌ در جستجوی موزیک خطایی رخ داد.")
 
-@app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
-    if telegram_app and main_loop:
-        json_data = request.get_json(force=True)
-        update = Update.de_json(json_data, telegram_app.bot)
-        asyncio.run_coroutine_threadsafe(telegram_app.process_update(update), main_loop)
-    return "ok", 200
-
-@app.route("/")
-def index():
-    return "Bot is running!", 200
-
 def main():
-    global telegram_app, main_loop
     if not TOKEN:
         print("❌ Error: TELEGRAM_TOKEN not set!")
         return
 
-    main_loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(main_loop)
-
-    telegram_app = ApplicationBuilder().token(TOKEN).build()
+    application = ApplicationBuilder().token(TOKEN).build()
     
-    telegram_app.add_handler(CommandHandler("start", start_handler))
-    telegram_app.add_handler(CallbackQueryHandler(button_callback_handler, pattern="^check_sub$"))
-    telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+    application.add_handler(CommandHandler("start", start_handler))
+    application.add_handler(CallbackQueryHandler(button_callback_handler, pattern="^check_sub$"))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 
-    main_loop.run_until_complete(telegram_app.initialize())
-    main_loop.run_until_complete(telegram_app.start())
-    
-    RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL")
-    if RENDER_EXTERNAL_URL:
-        webhook_url = f"{RENDER_EXTERNAL_URL}/{TOKEN}"
-        main_loop.run_until_complete(telegram_app.bot.set_webhook(webhook_url))
-        print(f"Webhook set to: {webhook_url}")
-
-    app.run(host="0.0.0.0", port=PORT)
+    print("Bot is starting via Polling...")
+    application.run_polling()
 
 if __name__ == "__main__":
     main()
