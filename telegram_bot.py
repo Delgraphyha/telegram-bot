@@ -115,7 +115,7 @@ def main():
         print("❌ Error: TELEGRAM_TOKEN not set!")
         return
 
-    # اجرای سرور فلاسگ در یک ترد جداگانه برای باز نگه داشتن پورت رندر
+    # اجرای سرور فلاسگ در ترد جداگانه
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.daemon = True
     flask_thread.start()
@@ -126,8 +126,25 @@ def main():
     application.add_handler(CallbackQueryHandler(button_callback_handler, pattern="^check_sub$"))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 
-    print("Bot is starting via Polling with Flask server...")
-    application.run_polling(drop_pending_updates=True)
+    # استفاده از Webhook به جای Polling برای جلوگیری صد در صدی از Conflict
+    PORT = int(os.environ.get("PORT", 10000))
+    RENDER_URL = os.environ.get("RENDER_EXTERNAL_URL") # لینک رندر شما
+    
+    if RENDER_URL:
+        webhook_url = f"{RENDER_URL.rstrip('/')}/{TOKEN}"
+        print(f"Starting webhook on {webhook_url}")
+        
+        # پاک کردن وب‌هوق‌های قبلی و تنظیم وب‌هوق جدید
+        application.run_webhook(
+            listen="0.0.0.0",
+            port=PORT,
+            url_path=TOKEN,
+            webhook_url=webhook_url
+        )
+    else:
+        # اگر روی سیستم خودتان بود از polling استفاده کند
+        print("Starting polling...")
+        application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
