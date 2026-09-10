@@ -76,7 +76,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         ydl_opts = {
             'format': 'bestaudio/best',
-            'default_search': 'scsearch1',  # جستجو به جای یوتیوب، در ساندکلاد انجام شود
+            'default_search': 'auto',
             'noplaylist': True,
             'outtmpl': 'song.%(ext)s',
             'postprocessors': [{
