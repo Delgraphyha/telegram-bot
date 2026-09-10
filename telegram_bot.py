@@ -73,6 +73,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             'format': 'bestaudio/best',
             'default_search': 'ytsearch1',
             'noplaylist': True,
+            'cookiefile': 'cookies.txt',
             'outtmpl': 'song.%(ext)s',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
