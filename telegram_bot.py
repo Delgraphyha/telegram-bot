@@ -78,9 +78,13 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             'format': 'bestaudio/best',
             'default_search': 'ytsearch1',
             'noplaylist': True,
-            'cookiefile': 'cookies.txt',
             'nocheckcertificate': True,
-            'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
+            'ignoreerrors': False,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['ios', 'mweb'],
+                }
+            },
             'outtmpl': 'song.%(ext)s',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
