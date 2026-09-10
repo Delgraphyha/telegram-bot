@@ -76,15 +76,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         ydl_opts = {
             'format': 'bestaudio/best',
-            'default_search': 'ytsearch1',
+            'default_search': 'scsearch1',  # جستجو به جای یوتیوب، در ساندکلاد انجام شود
             'noplaylist': True,
-            'nocheckcertificate': True,
-            'ignoreerrors': False,
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['ios', 'mweb'],
-                }
-            },
             'outtmpl': 'song.%(ext)s',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
