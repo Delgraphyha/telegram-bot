@@ -1,14 +1,22 @@
 import os
 import threading
 from flask import Flask
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters,
+)
 import yt_dlp
 
+# دریافت توکن از متغیرهای محیطی رندر
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHANNEL_USERNAME = "@delgraphyha"
 
-# راه‌اندازی سرور Flask برای پاسخ به پورت رندر
+# تنظیمات سرور Flask برای نگه داشتن پورت روی رندر
 app = Flask(__name__)
 
 @app.route('/')
@@ -19,43 +27,47 @@ def run_flask():
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
 
-async def check_subscription(user_id, context):
+# بررسی عضویت کاربر در کانال
+async def check_subscription(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
     try:
         member = await context.bot.get_chat_member(chat_id=CHANNEL_USERNAME, user_id=user_id)
-        if member.status in ['member', 'administrator', 'creator']:
+        if member.status in ['member', 'creator', 'administrator']:
             return True
     except Exception as e:
-        print(f"Error checking sub: {e}")
+        print(f"Error checking subscription: {e}")
     return False
 
+# دستور /start
 async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     is_member = await check_subscription(user_id, context)
-    
+
     if not is_member:
         keyboard = [
-            [InlineKeyboardButton("📢 عضویت در کانال دلگرافیها", url="https://t.me/delgraphyha")],
-            [InlineKeyboardButton("✅ عضو شدم، بررسی مجدد", callback_data="check_sub")]
+            [InlineKeyboardButton("📢 عضویت در کانال", url=f"https://t.me/{CHANNEL_USERNAME.lstrip('@')}y")],
+            [InlineKeyboardButton("✅ عضو شدم، بررسی کن", callback_data="check_sub")]
         ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
-            "🎵 برای استفاده از ربات و دریافت موزیک‌ها، لطفاً ابتدا در کانال ما عضو شوید:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+            "سلام! برای استفاده از ربات، لطفاً ابتدا در کانال ما عضو شوید:",
+            reply_markup=reply_markup
         )
     else:
-        await update.message.reply_text("🎧 عضویت شما تایید شد!\nحالا نام آهنگ مورد نظر خود را بفرستید تا جستجو کنم:")
+        await update.message.reply_text("خوش آمدید! نام آهنگ یا خواننده را بفرستید تا برایتان دانلود کنم.")
 
+# مدیریت دکمه شیشه‌ای بررسی عضویت
 async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
-    
-    if query.data == "check_sub":
-        is_member = await check_subscription(user_id, context)
-        if is_member:
-            await query.message.edit_text("✅ عضویت شما تایید شد! اکنون می‌توانید نام آهنگ خود را ارسال کنید.")
-        else:
-            await query.answer("❌ شما هنوز در کانال عضو نشده‌اید.", show_alert=True)
+    is_member = await check_subscription(user_id, context)
 
+    if is_member:
+        await query.edit_message_text("✅ عضویت شما تایید شد! حالا می‌توانید نام آهنگ مورد نظر خود را بفرستید.")
+    else:
+        await query.answer("❌ شما هنوز در کانال عضو نشده‌اید!", show_alert=True)
+
+# پردازش پیام‌ها و دانلود موزیک
 async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
@@ -74,7 +86,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             with open("cookies.txt", "w", encoding="utf-8") as f:
                 f.write(cookies_content)
 
-       ydl_opts = {
+        ydl_opts = {
             'format': 'bestaudio/best',
             'default_search': 'auto',
             'noplaylist': True,
@@ -89,9 +101,16 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(query_text, download=True)
-            if 'entries' in info:
-                info = info['entries'][0]
+            if info and 'entries' in info:
+                entries = info.get('entries')
+                if entries:
+                    info = entries[0]
             
+            if not info:
+                await update.message.reply_text("❌ متأسفانه فایلی پیدا نشد.")
+                await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=processing_msg.message_id)
+                return
+
             title = info.get('title', 'Unknown')
             file_path = "song.mp3"
 
@@ -110,10 +129,16 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print(f"Error downloading music: {e}")
         await update.message.reply_text("❌ در جستجوی موزیک خطایی رخ داد.")
+
 def main():
     if not TOKEN:
         print("❌ Error: TELEGRAM_TOKEN not set!")
         return
+
+    # اجرای سرور فلاسگ در ترد جداگانه برای مانیتورینگ رندر
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.daemon = True
+    flask_thread.start()
 
     application = ApplicationBuilder().token(TOKEN).build()
     
