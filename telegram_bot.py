@@ -74,6 +74,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             'default_search': 'ytsearch1',
             'noplaylist': True,
             'cookiefile': 'cookies.txt',
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'outtmpl': 'song.%(ext)s',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
