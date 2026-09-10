@@ -1,10 +1,23 @@
 import os
+import threading
+from flask import Flask
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 import yt_dlp
 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHANNEL_USERNAME = "@delgraphyha"
+
+# راه‌اندازی سرور Flask برای پاسخ به پورت رندر
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
 
 async def check_subscription(user_id, context):
     try:
@@ -97,13 +110,18 @@ def main():
         print("❌ Error: TELEGRAM_TOKEN not set!")
         return
 
+    # اجرای سرور فلاسگ در یک ترد جداگانه برای باز نگه داشتن پورت رندر
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.daemon = True
+    flask_thread.start()
+
     application = ApplicationBuilder().token(TOKEN).build()
     
     application.add_handler(CommandHandler("start", start_handler))
     application.add_handler(CallbackQueryHandler(button_callback_handler, pattern="^check_sub$"))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
 
-    print("Bot is starting via Polling...")
+    print("Bot is starting via Polling with Flask server...")
     application.run_polling()
 
 if __name__ == "__main__":
