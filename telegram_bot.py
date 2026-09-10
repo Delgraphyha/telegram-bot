@@ -68,24 +68,25 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query_text = update.message.text
     processing_msg = await update.message.reply_text("🔍 در حال جستجوی موزیک...")
 
-    cookies_content = os.getenv("YOUTUBE_COOKIES")
-    if cookies_content:
-        with open("cookies.txt", "w", encoding="utf-8") as f:
-            f.write(cookies_content)
+    try:
+        cookies_content = os.getenv("YOUTUBE_COOKIES")
+        if cookies_content:
+            with open("cookies.txt", "w", encoding="utf-8") as f:
+                f.write(cookies_content)
 
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'default_search': 'ytsearch1',
-        'noplaylist': True,
-        'cookiefile': 'cookies.txt',
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'outtmpl': 'song.%(ext)s',
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '128',
-        }],
-    }
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'default_search': 'ytsearch1',
+            'noplaylist': True,
+            'cookiefile': 'cookies.txt',
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'outtmpl': 'song.%(ext)s',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '128',
+            }],
+        }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(query_text, download=True)
@@ -110,7 +111,6 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print(f"Error downloading music: {e}")
         await update.message.reply_text("❌ در جستجوی موزیک خطایی رخ داد.")
-
 def main():
     if not TOKEN:
         print("❌ Error: TELEGRAM_TOKEN not set!")
