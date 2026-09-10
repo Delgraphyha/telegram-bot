@@ -76,9 +76,9 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
        ydl_opts = {
             'format': 'bestaudio/best',
-            'default_search': 'ytsearch1',
+            'default_search': 'auto',
             'noplaylist': True,
-            'ignoreerrors': True, # رد کردن خطای پیدا نشدن آهنگ به جای کرش کردن ربات
+            'ignoreerrors': True,
             'outtmpl': 'song.%(ext)s',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
