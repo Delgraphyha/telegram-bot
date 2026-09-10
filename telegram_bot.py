@@ -74,10 +74,11 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             with open("cookies.txt", "w", encoding="utf-8") as f:
                 f.write(cookies_content)
 
-        ydl_opts = {
+       ydl_opts = {
             'format': 'bestaudio/best',
-            'default_search': 'auto',
+            'default_search': 'ytsearch1',
             'noplaylist': True,
+            'ignoreerrors': True, # رد کردن خطای پیدا نشدن آهنگ به جای کرش کردن ربات
             'outtmpl': 'song.%(ext)s',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
