@@ -1,6 +1,4 @@
 import os
-import threading
-from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
@@ -15,17 +13,6 @@ import yt_dlp
 # دریافت توکن از متغیرهای محیطی رندر
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHANNEL_USERNAME = "@delgraphyha"
-
-# تنظیمات سرور Flask برای نگه داشتن پورت روی رندر
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "Bot is running!"
-
-def run_flask():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
 
 # بررسی عضویت کاربر در کانال
 async def check_subscription(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
@@ -134,11 +121,6 @@ def main():
     if not TOKEN:
         print("❌ Error: TELEGRAM_TOKEN not set!")
         return
-
-    # اجرای سرور فلاسگ در ترد جداگانه برای مانیتورینگ رندر
-    flask_thread = threading.Thread(target=run_flask)
-    flask_thread.daemon = True
-    flask_thread.start()
 
     application = ApplicationBuilder().token(TOKEN).build()
     
