@@ -4,6 +4,8 @@ import time
 import uuid
 import shutil
 import asyncio
+import unicodedata
+from difflib import SequenceMatcher
 import threading
 from pathlib import Path
 
@@ -28,7 +30,7 @@ RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "")
 DOWNLOAD_ROOT = Path("downloads")
 DOWNLOAD_ROOT.mkdir(exist_ok=True)
 
-SEARCH_RESULTS_PER_SOURCE = 4
+SEARCH_RESULTS_PER_SOURCE = 8
 SEARCH_COOLDOWN_SECONDS = 5
 
 # محدود کردن فشار روی سایت‌ها
@@ -317,17 +319,76 @@ def inspect_direct_url(url: str):
 
 
 async def search_music(query_text: str):
-    # لینک مستقیم از هر سایتی که yt-dlp پشتیبانی کند
+    # Direct URL from any yt-dlp-supported site
     if is_url(query_text):
         item = await asyncio.to_thread(inspect_direct_url, query_text)
+        return [item] if item else []
 
-        if item:
-            return [item]
+    def clean_text(value: str) -> str:
+        value = unicodedata.normalize("NFKC", (value or "").lower())
+        value = re.sub(r"[^\w\s]", " ", value, flags=re.UNICODE)
+        return " ".join(value.split())
 
-        return []
+    def score_result(item: dict) -> float:
+        query = clean_text(query_text)
+        title = clean_text(item.get("title", ""))
+        uploader = clean_text(item.get("uploader", ""))
+        haystack = f"{title} {uploader}".strip()
 
-    # جستجوی اسمی چندمنبعی
-    youtube_task = asyncio.to_thread(
+        if not query or not haystack:
+            return 0.0
+
+        query_words = set(query.split())
+        title_words = set(title.split())
+        all_words = set(haystack.split())
+
+        # Exact query/title matches matter most.
+        score = SequenceMatcher(None, query, title).ratio() * 55
+        score += SequenceMatcher(None, query, haystack).ratio() * 20
+
+        if query == title:
+            score += 35
+        elif query in title:
+            score += 22
+        elif query in haystack:
+            score += 12
+
+        if query_words:
+            score += (len(query_words & title_words) / len(query_words)) * 35
+            score += (len(query_words & all_words) / len(query_words)) * 15
+
+        # Prefer sensible song-length results over very long videos/streams.
+        duration = item.get("duration")
+        if isinstance(duration, (int, float)):
+            if 90 <= duration <= 600:
+                score += 8
+            elif duration > 1200:
+                score -= 15
+
+        # Usually the user wants the original track, not these variants.
+        penalty_words = {
+            "karaoke": 14,
+            "reaction": 18,
+            "tutorial": 18,
+            "cover": 8,
+            "remix": 6,
+            "slowed": 8,
+            "reverb": 8,
+            "instrumental": 6,
+            "live": 4,
+        }
+        for word, penalty in penalty_words.items():
+            if word in title_words and word not in query_words:
+                score -= penalty
+
+        # YouTube is the primary source; SoundCloud remains a fallback.
+        if item.get("source") == "YouTube":
+            score += 5
+
+        return score
+
+    # Search YouTube first with a larger candidate pool.
+    youtube_results = await asyncio.to_thread(
         search_with_prefix,
         query_text,
         "ytsearch",
@@ -335,34 +396,33 @@ async def search_music(query_text: str):
         SEARCH_RESULTS_PER_SOURCE,
     )
 
-    soundcloud_task = asyncio.to_thread(
-        search_with_prefix,
-        query_text,
-        "scsearch",
-        "SoundCloud",
-        SEARCH_RESULTS_PER_SOURCE,
-    )
+    candidates = list(youtube_results)
 
-    youtube_results, soundcloud_results = await asyncio.gather(
-        youtube_task,
-        soundcloud_task
-    )
+    # SoundCloud is a fallback/additional source, not an alternating list.
+    # Search it when YouTube returned only a few usable candidates.
+    if len(candidates) < 6:
+        soundcloud_results = await asyncio.to_thread(
+            search_with_prefix,
+            query_text,
+            "scsearch",
+            "SoundCloud",
+            SEARCH_RESULTS_PER_SOURCE,
+        )
+        candidates.extend(soundcloud_results)
 
-    # YouTube اول نیست چون "فارسی" یا "انگلیسی" اهمیتی ندارد؛
-    # فقط نتایج چند منبع با هم نمایش داده می‌شوند.
-    combined = []
+    # Remove duplicate URLs before ranking.
+    unique = []
+    seen_urls = set()
+    for item in candidates:
+        url = item.get("url")
+        if not url or url in seen_urls:
+            continue
+        seen_urls.add(url)
+        item["score"] = score_result(item)
+        unique.append(item)
 
-    # یکی در میان برای تنوع منبع
-    max_len = max(len(youtube_results), len(soundcloud_results), 0)
-
-    for i in range(max_len):
-        if i < len(youtube_results):
-            combined.append(youtube_results[i])
-
-        if i < len(soundcloud_results):
-            combined.append(soundcloud_results[i])
-
-    return combined[:8]
+    unique.sort(key=lambda x: x.get("score", 0), reverse=True)
+    return unique[:8]
 
 
 # ----------------------------
@@ -411,7 +471,8 @@ def download_audio(url: str, user_id: int):
             "work_dir": str(user_dir),
         }
 
-    except Exception:
+    except Exception as e:
+        print(f"yt-dlp download error for {url}: {type(e).__name__}: {e}")
         shutil.rmtree(user_dir, ignore_errors=True)
         raise
 
@@ -573,7 +634,8 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             duration = format_duration(item.get("duration"))
             source = item["source"]
 
-            button_text = f"🎵 {title}"
+            rank = index + 1
+            button_text = f"{rank}. 🎵 {title}"
 
             if duration:
                 button_text += f" · {duration}"
